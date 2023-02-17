@@ -1,8 +1,14 @@
 [package]
-name = "self_host_fonts"
+name = "shfonts"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { version="4.1.6", features = ["derive"] }
+
+[dev-dependencies]
+assert_cmd = "2.0.8"
+predicates = "2.1.5"
+rand = "0.8.5"
