@@ -9,6 +9,8 @@ edition = "2021"
 clap = { version = "4.1.6", features = ["derive"] }
 lightningcss = "1.0.0-alpha.40"
 minreq = { version = "2.6.0", features = ["https-rustls"] }
+rand = "0.8.5"
+url = "2.3.1"
 
 [dev-dependencies]
 assert_cmd = "2.0.8"

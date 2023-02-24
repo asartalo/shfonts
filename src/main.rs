@@ -1,65 +1,65 @@
-use lightningcss::rules::font_face::{FontFaceRule, Source};
-use lightningcss::rules::CssRule::FontFace;
-use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
-use std::error::Error;
-use std::path::PathBuf;
-
 use clap::Parser;
+use lightningcss::rules::CssRule::FontFace;
+use lightningcss::stylesheet::{ParserOptions, StyleSheet};
+use shfonts::{Cli, MyResult};
+use std::env;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use url::Url;
 
-type MyResult<T> = Result<T, Box<dyn Error>>;
-
-#[derive(Parser)]
-#[command(
-    author = "Wayne Duran <asartalo@gmail.com>",
-    version = "0.1.0",
-    about = "Download fonts for self-hosting",
-    long_about = None
-)]
-struct Cli {
-    css_path: String,
-
-    #[arg(short = 'd', long = "dir", value_name = "DIRECTORY")]
-    dir: Option<PathBuf>,
-}
-
-fn get_font_url(rule: &FontFaceRule) -> Option<String> {
-    for property in rule.properties {
-        match property {
-            Source::Url(url_src) => return Some(url_src.url.url.to_string()),
-            _ => {
-                // do nothing
-            }
-        }
+fn get_output_dir(cli: &Cli) -> MyResult<PathBuf> {
+    match &cli.dir {
+        Some(dir) => Ok(dir.clone()),
+        // TODO: Instead of panicking, how to return proper result
+        None => Ok(env::current_dir().unwrap()),
     }
-    None
 }
 
 fn run() -> MyResult<()> {
     let cli = Cli::parse();
-    let path = cli.css_path;
+    let path = cli.css_path.clone();
+    let output_dir = get_output_dir(&cli)?;
 
-    let response = minreq::get(path).send()?;
+    let response = minreq::get(&path).send()?;
     let stylesheet = StyleSheet::parse(response.as_str()?, ParserOptions::default()).unwrap();
 
     let mut font_urls: Vec<String> = Vec::new();
     for rule in &stylesheet.rules.0 {
-        match rule {
-            FontFace(ff_rule) => {
-                println!("Font Face: {:?}", ff_rule.properties);
-                match get_font_url(ff_rule) {
-                    None => {
-                        // do nothing
-                    }
-                    Some(url) => font_urls.push(url),
-                }
-            }
-            _ => {
-                // Do nothing.
+        if let FontFace(ff_rule) = rule {
+            if let Some(url) = shfonts::get_font_url(ff_rule) {
+                font_urls.push(url)
             }
         }
     }
-    let res = stylesheet.to_css(PrinterOptions::default()).unwrap();
-    println!("{}", res.code);
+
+    let css_url = Url::parse(&path)?;
+    let base = shfonts::get_base_url(&css_url).unwrap();
+    for font_url in &font_urls {
+        let full_url = if font_url.starts_with("http://") || font_url.starts_with("https://") {
+            Url::parse(font_url)?
+        } else if font_url.starts_with("/") && !font_url.starts_with("//") {
+            let stripped = match font_url.strip_prefix("/") {
+                Some(str) => str,
+                None => font_url,
+            };
+            Url::parse(&(base.as_str().to_owned() + stripped))?
+        } else {
+            let base_url = Url::parse(&path)?;
+            base_url.join(&font_url)?;
+            base_url
+        };
+        let response = minreq::get(full_url.to_string()).send()?;
+        let file_name = shfonts::get_file_name(&full_url);
+
+        let file_path = output_dir.join(file_name);
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(file_path)
+            .unwrap();
+        file.write_all(response.as_bytes())?;
+    }
     Ok(())
 }
 

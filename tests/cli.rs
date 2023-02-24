@@ -1,7 +1,8 @@
 use assert_cmd::Command;
 use httpmock::prelude::*;
+use std::env;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -14,58 +15,76 @@ fn dies_no_args() -> TestResult {
     Ok(())
 }
 
+fn get_current_working_dir() -> std::io::Result<PathBuf> {
+    env::current_dir()
+}
+
 #[test]
 fn downloads_font_files() -> TestResult {
     let server = MockServer::start();
     let css_request_mock = server.mock(|when, then| {
         when.method("GET")
             .path("/css")
-            .query_param("family", "Roboto:300,300i,400");
+            .query_param("family", "Roboto:300,300i,400")
+            .matches(|req| req.path == "/css");
         then.status(200)
             .body_from_file("tests/test_files/example.css");
     });
 
     let woff_i3x_mock = server.mock(|when, then| {
-        when.method("GET").path("/ri3lx.woff2");
+        when.method("GET")
+            .path("/ri3lx.woff2")
+            .matches(|req| req.path == "/ri3lx.woff2");
         then.status(200)
             .body_from_file("tests/test_files/Roboto--italic--300--latin-ext.woff2");
     });
 
     let woff_i3_mock = server.mock(|when, then| {
-        when.method("GET").path("/ri3l.woff2");
+        when.method("GET")
+            .path("/ri3l.woff2")
+            .matches(|req| req.path == "/ri3l.woff2");
         then.status(200)
             .body_from_file("tests/test_files/Roboto--italic--300--latin.woff2");
     });
 
     let woff_n3x_mock = server.mock(|when, then| {
-        when.method("GET").path("/rn3lx.woff2");
+        when.method("GET")
+            .path("/rn3lx.woff2")
+            .matches(|req| req.path == "/rn3lx.woff2");
         then.status(200)
             .body_from_file("tests/test_files/Roboto--normal--300--latin-ext.woff2");
     });
 
     let woff_n3_mock = server.mock(|when, then| {
-        when.method("GET").path("/rn3l.woff2");
+        when.method("GET")
+            .path("/rn3l.woff2")
+            .matches(|req| req.path == "/rn3l.woff2");
         then.status(200)
             .body_from_file("tests/test_files/Roboto--normal--300--latin.woff2");
     });
 
     let woff_n4x_mock = server.mock(|when, then| {
-        when.method("GET").path("/rn4lx.woff2");
+        when.method("GET")
+            .path("/rn4lx.woff2")
+            .matches(|req| req.path == "/rn4lx.woff2");
         then.status(200)
             .body_from_file("tests/test_files/Roboto--normal--400--latin-ext.woff2");
     });
 
     let woff_n4_mock = server.mock(|when, then| {
-        when.method("GET").path("/rn4l.woff2");
+        when.method("GET")
+            .path("/rn4l.woff2")
+            .matches(|req| req.path == "/rn4l.woff2");
         then.status(200)
             .body_from_file("tests/test_files/Roboto--normal--400--latin.woff2");
     });
 
     let css_url = server.url("/css?family=Roboto:300,300i,400");
-    let dir = Path::new("./tmp");
+    let dir = Path::new("./tests/tmp");
+    let working_dir = get_current_working_dir()?;
 
     // Remove the output directory if it already exists
-    if dir.exists() {
+    if dir.exists() && dir.starts_with(working_dir) {
         fs::remove_dir_all(dir)?;
     }
 
