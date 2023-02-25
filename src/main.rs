@@ -11,18 +11,18 @@ use url::Url;
 fn get_output_dir(cli: &Cli) -> MyResult<PathBuf> {
     match &cli.dir {
         Some(dir) => Ok(dir.clone()),
-        // TODO: Instead of panicking, how to return proper result
-        None => Ok(env::current_dir().unwrap()),
+        None => Ok(env::current_dir()?),
     }
 }
 
 fn run() -> MyResult<()> {
     let cli = Cli::parse();
-    let path = cli.css_path.clone();
+    let path = &cli.css_path;
     let output_dir = get_output_dir(&cli)?;
 
-    let response = minreq::get(&path).send()?;
-    let stylesheet = StyleSheet::parse(response.as_str()?, ParserOptions::default()).unwrap();
+    let css_response = minreq::get(path).send()?;
+    let css_str = css_response.as_str()?;
+    let stylesheet = StyleSheet::parse(css_str, ParserOptions::default()).unwrap();
 
     let mut font_urls: Vec<String> = Vec::new();
     for rule in &stylesheet.rules.0 {
@@ -33,20 +33,20 @@ fn run() -> MyResult<()> {
         }
     }
 
-    let css_url = Url::parse(&path)?;
-    let base = shfonts::get_base_url(&css_url).unwrap();
+    let css_url = Url::parse(path)?;
+    let base = shfonts::get_base_url(&css_url)?;
     for font_url in &font_urls {
         let full_url = if font_url.starts_with("http://") || font_url.starts_with("https://") {
             Url::parse(font_url)?
-        } else if font_url.starts_with("/") && !font_url.starts_with("//") {
-            let stripped = match font_url.strip_prefix("/") {
+        } else if font_url.starts_with('/') && !font_url.starts_with("//") {
+            let stripped = match font_url.strip_prefix('/') {
                 Some(str) => str,
                 None => font_url,
             };
             Url::parse(&(base.as_str().to_owned() + stripped))?
         } else {
-            let base_url = Url::parse(&path)?;
-            base_url.join(&font_url)?;
+            let base_url = Url::parse(path)?;
+            base_url.join(font_url)?;
             base_url
         };
         let response = minreq::get(full_url.to_string()).send()?;
@@ -56,8 +56,7 @@ fn run() -> MyResult<()> {
         let mut file = fs::OpenOptions::new()
             .create(true)
             .write(true)
-            .open(file_path)
-            .unwrap();
+            .open(file_path)?;
         file.write_all(response.as_bytes())?;
     }
     Ok(())

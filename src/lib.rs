@@ -52,7 +52,7 @@ pub fn get_font_url(rule: &FontFaceRule) -> Option<String> {
 pub fn get_file_name(url: &Url) -> String {
     if let Some(mut segments) = url.path_segments() {
         if let Some(last) = segments.next_back() {
-            if last.len() > 0 {
+            if !last.is_empty() {
                 return last.to_string();
             }
         }
