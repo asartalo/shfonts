@@ -36,6 +36,7 @@ pub fn get_base_url(full_url: &Url) -> MyResult<Url> {
     Ok(url)
 }
 
+#[must_use]
 pub fn get_font_url(rule: &FontFaceRule) -> Option<String> {
     for property in &rule.properties {
         if let Source(sources) = property {
@@ -49,6 +50,7 @@ pub fn get_font_url(rule: &FontFaceRule) -> Option<String> {
     None
 }
 
+#[must_use]
 pub fn get_file_name(url: &Url) -> String {
     if let Some(mut segments) = url.path_segments() {
         if let Some(last) = segments.next_back() {

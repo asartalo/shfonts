@@ -15,23 +15,35 @@ fn get_output_dir(cli: &Cli) -> MyResult<PathBuf> {
     }
 }
 
+fn get_urls(css_str: &str) -> MyResult<Vec<String>> {
+    let mut font_urls: Vec<String> = Vec::new();
+    let stylesheet = StyleSheet::parse(css_str, ParserOptions::default()).unwrap();
+
+    for rule in &stylesheet.rules.0 {
+        if let FontFace(ff_rule) = rule {
+            if let Some(url) = shfonts::get_font_url(ff_rule) {
+                font_urls.push(url);
+            }
+        }
+    }
+    Ok(font_urls)
+}
+
 fn run() -> MyResult<()> {
     let cli = Cli::parse();
     let path = &cli.css_path;
     let output_dir = get_output_dir(&cli)?;
 
-    let css_response = minreq::get(path).send()?;
+    let request = minreq::get(path)
+        .with_header("Accept", "text/css,*/*;q=0.1")
+        .with_header(
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/111.0",
+        );
+    let css_response = request.send()?;
     let css_str = css_response.as_str()?;
-    let stylesheet = StyleSheet::parse(css_str, ParserOptions::default()).unwrap();
 
-    let mut font_urls: Vec<String> = Vec::new();
-    for rule in &stylesheet.rules.0 {
-        if let FontFace(ff_rule) = rule {
-            if let Some(url) = shfonts::get_font_url(ff_rule) {
-                font_urls.push(url)
-            }
-        }
-    }
+    let font_urls = get_urls(css_str)?;
 
     let css_url = Url::parse(path)?;
     let base = shfonts::get_base_url(&css_url)?;
@@ -64,7 +76,7 @@ fn run() -> MyResult<()> {
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         std::process::exit(1);
     }
 }
