@@ -1,10 +1,21 @@
 use assert_cmd::Command;
 use httpmock::prelude::*;
+use pretty_assertions::assert_eq;
 use std::env;
 use std::fs;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
+type MyResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+fn file_contents(file_path: &str) -> MyResult<String> {
+    let mut file = File::open(file_path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    Ok(String::from_utf8_lossy(&buffer).to_string())
+}
 
 #[test]
 fn dies_no_args() -> TestResult {
@@ -91,6 +102,7 @@ fn downloads_font_files() -> TestResult {
     let mut cmd = Command::cargo_bin("shfonts")?;
     cmd.arg(css_url)
         .arg(format!("--dir={}", dir.to_str().unwrap()))
+        .arg("--font-url-prefix=/assets/fonts/")
         .assert()
         .success();
 
@@ -110,6 +122,15 @@ fn downloads_font_files() -> TestResult {
     assert!(dir.join("rn3l.woff2").exists());
     assert!(dir.join("rn4lx.woff2").exists());
     assert!(dir.join("rn4l.woff2").exists());
+
+    // Rewritten css file
+    let updated_css_file = dir.join("fonts.css");
+    assert!(updated_css_file.exists());
+
+    assert_eq!(
+        file_contents(updated_css_file.to_str().unwrap())?,
+        file_contents("tests/test_files/expected.css")?
+    );
 
     Ok(())
 }

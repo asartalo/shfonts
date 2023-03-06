@@ -1,7 +1,7 @@
 use clap::Parser;
-use lightningcss::rules::CssRule::FontFace;
-use lightningcss::stylesheet::{ParserOptions, StyleSheet};
 use shfonts::{Cli, MyResult};
+use shfonts::{LinesWithEndings, UrlByLine};
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -15,23 +15,10 @@ fn get_output_dir(cli: &Cli) -> MyResult<PathBuf> {
     }
 }
 
-fn get_urls(css_str: &str) -> MyResult<Vec<String>> {
-    let mut font_urls: Vec<String> = Vec::new();
-    let stylesheet = StyleSheet::parse(css_str, ParserOptions::default()).unwrap();
-
-    for rule in &stylesheet.rules.0 {
-        if let FontFace(ff_rule) = rule {
-            if let Some(url) = shfonts::get_font_url(ff_rule) {
-                font_urls.push(url);
-            }
-        }
-    }
-    Ok(font_urls)
-}
-
 fn run() -> MyResult<()> {
     let cli = Cli::parse();
     let path = &cli.css_path;
+    let font_url_prefix = &cli.font_url_prefix;
     let output_dir = get_output_dir(&cli)?;
 
     let request = minreq::get(path)
@@ -43,11 +30,13 @@ fn run() -> MyResult<()> {
     let css_response = request.send()?;
     let css_str = css_response.as_str()?;
 
-    let font_urls = get_urls(css_str)?;
+    let font_urls = shfonts::get_url_data(css_str)?;
 
     let css_url = Url::parse(path)?;
     let base = shfonts::get_base_url(&css_url)?;
-    for font_url in &font_urls {
+    let mut replacements: HashMap<&String, String> = HashMap::new();
+    for font_url_data in &font_urls {
+        let font_url = &font_url_data.url;
         let full_url = if font_url.starts_with("http://") || font_url.starts_with("https://") {
             Url::parse(font_url)?
         } else if font_url.starts_with('/') && !font_url.starts_with("//") {
@@ -63,6 +52,7 @@ fn run() -> MyResult<()> {
         };
         let response = minreq::get(full_url.to_string()).send()?;
         let file_name = shfonts::get_file_name(&full_url);
+        replacements.insert(font_url, format!("{}{}", font_url_prefix, &file_name));
 
         let file_path = output_dir.join(file_name);
         let mut file = fs::OpenOptions::new()
@@ -71,6 +61,42 @@ fn run() -> MyResult<()> {
             .open(file_path)?;
         file.write_all(response.as_bytes())?;
     }
+
+    let css_file_path = output_dir.join("fonts.css");
+    let mut css_file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(css_file_path)?;
+
+    let urls_by_line = UrlByLine::new(&font_urls);
+
+    let mut line_number: u32 = 0;
+    let lines = LinesWithEndings::from(css_response.as_str()?);
+    for line_result in lines {
+        line_number += 1;
+        let line = line_result;
+
+        if let Some(items) = urls_by_line.at(line_number) {
+            for item in items.iter().rev() {
+                let mut line_clone = line.to_owned();
+                let start = usize::try_from(item.location.column)? + 3;
+                let end = start + item.url.len();
+                line_clone.replace_range(start..end, replacements.get(&item.url).unwrap());
+
+                css_file.write_all(line_clone.as_bytes())?;
+            }
+        } else {
+            css_file.write_all(line.as_bytes())?;
+        }
+
+        // if font_urls.is_empty() {
+        //     css_file.write(line.as_bytes())?;
+        // } else {
+        //     println!("{} {}", line_number, &line);
+        // }
+    }
+    // css_file.write_all(css_response.as_bytes())?;
+
     Ok(())
 }
 
