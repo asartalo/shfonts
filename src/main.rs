@@ -27,14 +27,18 @@ fn run() -> MyResult<()> {
             "User-Agent",
             "Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/111.0",
         );
+
+    println!("Loading {}", path);
     let css_response = request.send()?;
     let css_str = css_response.as_str()?;
 
     let font_urls = shfonts::get_url_data(css_str)?;
 
+    println!("Found {} font declarations", font_urls.len());
     let css_url = Url::parse(path)?;
     let base = shfonts::get_base_url(&css_url)?;
     let mut replacements: HashMap<&String, String> = HashMap::new();
+
     for font_url_data in &font_urls {
         let font_url = &font_url_data.url;
         let full_url = if font_url.starts_with("http://") || font_url.starts_with("https://") {
@@ -50,6 +54,8 @@ fn run() -> MyResult<()> {
             base_url.join(font_url)?;
             base_url
         };
+
+        println!("Downloading {}", full_url);
         let response = minreq::get(full_url.to_string()).send()?;
         let file_name = shfonts::get_file_name(&full_url);
         replacements.insert(font_url, format!("{}{}", font_url_prefix, &file_name));
@@ -63,6 +69,7 @@ fn run() -> MyResult<()> {
     }
 
     let css_file_path = output_dir.join("fonts.css");
+    println!("Writing updated css file: {}", css_file_path.display());
     let mut css_file = fs::OpenOptions::new()
         .create(true)
         .write(true)
